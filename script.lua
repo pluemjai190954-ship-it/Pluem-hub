@@ -33,7 +33,7 @@ UIS.InputBegan:Connect(function(input, gp)
     end
 
     -- 🔥 F5 เปิด/ปิด ESP
-    if input.KeyCode == Enum.KeyCode.F5 then
+    if input.KeyCode == Enum.KeyCode.Q then
         espEnabled = not espEnabled
         print("ESP:", espEnabled and "ON" or "OFF")
     end
