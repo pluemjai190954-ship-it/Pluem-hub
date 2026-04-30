@@ -4,7 +4,7 @@ local UIS = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
 -- SETTINGS
-local aimRadius = 95
+local aimRadius = 110
 local aimSmoothness = 0.5
 local showFOV = true
 local espEnabled = true
@@ -38,7 +38,7 @@ UIS.InputBegan:Connect(function(input, gp)
         print("ESP:", espEnabled and "ON" or "OFF")
     end
 
-    -- 🔥 F6 เปิด/ปิด AIMBOT
+    -- 🔥 Q เปิด/ปิด AIMBOT
     if input.KeyCode == Enum.KeyCode.Q then
         aimbotEnabled = not aimbotEnabled
         print("AIMBOT:", aimbotEnabled and "ON" or "OFF")
@@ -101,7 +101,7 @@ createButton("STREAM: OFF", 180, function(btn)
     btn.Text = "STREAM: "..(streamMode and "ON" or "OFF")
 end)
 
--- PLAYER LIST
+-- PLAYER LIST (Optimized: ลบเฉพาะตอนจำเป็น)
 local playerListFrame = Instance.new("Frame", frame)
 playerListFrame.Size = UDim2.new(1, -10, 0, 150)
 playerListFrame.Position = UDim2.new(0, 5, 0, 220)
@@ -110,33 +110,30 @@ playerListFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
 local layout = Instance.new("UIListLayout", playerListFrame)
 
 local function refreshPlayerList()
-    for _,v in pairs(playerListFrame:GetChildren()) do
-        if v:IsA("TextButton") then
-            v:Destroy()
+    local currentPlayers = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            currentPlayers[p.Name] = true
+            local btn = playerListFrame:FindFirstChild(p.Name)
+            
+            if not btn then
+                btn = Instance.new("TextButton", playerListFrame)
+                btn.Name = p.Name
+                btn.Size = UDim2.new(1, 0, 0, 25)
+                btn.TextColor3 = Color3.new(1,1,1)
+                btn.MouseButton1Click:Connect(function()
+                    partyList[p.Name] = not partyList[p.Name]
+                end)
+            end
+            
+            btn.Text = p.Name
+            btn.BackgroundColor3 = partyList[p.Name] and Color3.fromRGB(0,120,0) or Color3.fromRGB(50,50,50)
         end
     end
-
-    for _,p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then
-            local btn = Instance.new("TextButton", playerListFrame)
-            btn.Size = UDim2.new(1, 0, 0, 25)
-            btn.Text = p.Name
-
-            if partyList[p.Name] then
-                btn.BackgroundColor3 = Color3.fromRGB(0,120,0)
-            else
-                btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
-            end
-
-            btn.TextColor3 = Color3.new(1,1,1)
-
-            btn.MouseButton1Click:Connect(function()
-                if partyList[p.Name] then
-                    partyList[p.Name] = nil
-                else
-                    partyList[p.Name] = true
-                end
-            end)
+    
+    for _, v in pairs(playerListFrame:GetChildren()) do
+        if v:IsA("TextButton") and not currentPlayers[v.Name] then
+            v:Destroy()
         end
     end
 end
@@ -144,7 +141,7 @@ end
 task.spawn(function()
     while true do
         refreshPlayerList()
-        task.wait(2)
+        task.wait(1)
     end
 end)
 
@@ -199,7 +196,7 @@ local function aimAt(t)
     cam.CFrame = cam.CFrame:Lerp(cf, aimSmoothness)
 end
 
--- ESP LOOP
+-- ESP LOOP (คนทั่วไป: เส้นเหลือง-ชื่อขาว | ปาร์ตี้: เขียวทั้งคู่)
 task.spawn(function()
     while true do
         if espEnabled and not streamMode then
@@ -210,64 +207,62 @@ task.spawn(function()
                     local head = char:FindFirstChild("Head")
 
                     if hum and hum.Health > 0 and head then
+                        -- 1. จัดการเส้น Highlight รอบตัว
                         local highlight = char:FindFirstChild("ESPHighlight")
                         if not highlight then
                             highlight = Instance.new("Highlight", char)
                             highlight.Name = "ESPHighlight"
-                            highlight.FillTransparency = 1
-                            highlight.OutlineTransparency = 0.4
                         end
+                        
+                        highlight.FillTransparency = 1
+                        highlight.OutlineTransparency = 0.2 -- เส้นเข้มเห็นชัด
 
-                        if partyList[p.Name] then
-                            highlight.OutlineColor = Color3.fromRGB(0,255,0)
-                        else
-                            highlight.OutlineColor = Color3.fromRGB(255,255,0)
-                        end
-
-                        if not head:FindFirstChild("NameTag") then
-                            local bill = Instance.new("BillboardGui", head)
+                        -- 2. จัดการชื่อ (NameTag)
+                        local bill = head:FindFirstChild("NameTag")
+                        if not bill then
+                            bill = Instance.new("BillboardGui", head)
                             bill.Name = "NameTag"
                             bill.Size = UDim2.new(0,80,0,16)
                             bill.StudsOffset = Vector3.new(0,3,0)
                             bill.AlwaysOnTop = true
 
                             local txt = Instance.new("TextLabel", bill)
+                            txt.Name = "Text"
                             txt.Size = UDim2.new(1,0,1,0)
                             txt.BackgroundTransparency = 1
-                            txt.TextScaled = false
                             txt.TextSize = 12
                             txt.Font = Enum.Font.SourceSansBold
-                            txt.Name = "Text"
+                            txt.TextStrokeTransparency = 0 -- ขอบตัวหนังสือดำชัด
                         end
 
-                        local txt = head.NameTag.Text
+                        local txt = bill.Text
                         txt.Text = p.Name
 
-                        -- 🔥 ตรงที่มึงต้องการ
+                        -- 3. เช็คสถานะปาร์ตี้เพื่อเปลี่ยนสี
                         if partyList[p.Name] then
-                            txt.TextColor3 = Color3.fromRGB(0,255,0)
-                            txt.TextStrokeTransparency = 0
+                            -- ถ้าอยู่ในปาร์ตี้ (เขียวทั้งเส้นและชื่อ)
+                            highlight.OutlineColor = Color3.fromRGB(0, 255, 0)
+                            txt.TextColor3 = Color3.fromRGB(0, 255, 0)
                         else
-                            txt.TextColor3 = Color3.fromRGB(255,255,255)
-                            txt.TextStrokeTransparency = 0
+                            -- ถ้าไม่ใช่ (เส้นเหลือง - ชื่อขาว)
+                            highlight.OutlineColor = Color3.fromRGB(255, 255, 0)
+                            txt.TextColor3 = Color3.fromRGB(255, 255, 255)
                         end
                     end
                 end
             end
         else
+            -- Cleanup เมื่อปิด ESP หรือเปิด Stream Mode
             for _,p in pairs(Players:GetPlayers()) do
                 if p.Character then
                     local h = p.Character:FindFirstChild("ESPHighlight")
                     if h then h:Destroy() end
-
                     local head = p.Character:FindFirstChild("Head")
-                    if head and head:FindFirstChild("NameTag") then
-                        head.NameTag:Destroy()
-                    end
+                    if head and head:FindFirstChild("NameTag") then head.NameTag:Destroy() end
                 end
             end
         end
-        task.wait(0.15)
+        task.wait(0.1)
     end
 end)
 
