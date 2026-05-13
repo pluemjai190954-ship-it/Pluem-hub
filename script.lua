@@ -8,7 +8,7 @@ local aimRadius = 110
 local aimSmoothness = 0.5
 local showFOV = true
 local espEnabled = true
-local wallhackEnabled = true -- ในที่นี้คือ Lock ทะลุกำแพง
+local wallhackEnabled = true 
 local aimbotEnabled = true
 local streamMode = false
 
@@ -22,6 +22,7 @@ local frame = Instance.new("Frame", gui)
 frame.Size = UDim2.new(0, 220, 0, 420)
 frame.Position = UDim2.new(0, 20, 0.5, -210)
 frame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+frame.BorderSizePixel = 0
 
 -- HOTKEYS
 UIS.InputBegan:Connect(function(input, gp)
@@ -44,37 +45,45 @@ local function createButton(text, posY, callback)
     btn.Position = UDim2.new(0, 5, 0, posY)
     btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
     btn.TextColor3 = Color3.new(1,1,1)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 14
     btn.Text = text
     btn.MouseButton1Click:Connect(function() callback(btn) end)
     return btn
 end
 
--- TEXT BOXES (FOV & SMOOTH)
+-- TEXT BOXES
 local fovBox = Instance.new("TextBox", frame)
 fovBox.Size = UDim2.new(1, -10, 0, 30)
 fovBox.Position = UDim2.new(0, 5, 0, 5)
-fovBox.Text = tostring(aimRadius)
+fovBox.Text = "FOV: "..tostring(aimRadius)
 fovBox.BackgroundColor3 = Color3.fromRGB(30,30,30)
 fovBox.TextColor3 = Color3.new(1,1,1)
-fovBox.FocusLost:Connect(function() aimRadius = tonumber(fovBox.Text) or aimRadius end)
+fovBox.FocusLost:Connect(function() 
+    local val = string.gsub(fovBox.Text, "FOV: ", "")
+    aimRadius = tonumber(val) or aimRadius 
+    fovBox.Text = "FOV: "..tostring(aimRadius)
+end)
 
 local smoothBox = Instance.new("TextBox", frame)
 smoothBox.Size = UDim2.new(1, -10, 0, 30)
 smoothBox.Position = UDim2.new(0, 5, 0, 40)
-smoothBox.Text = tostring(aimSmoothness)
+smoothBox.Text = "SMOOTH: "..tostring(aimSmoothness)
 smoothBox.BackgroundColor3 = Color3.fromRGB(30,30,30)
 smoothBox.TextColor3 = Color3.new(1,1,1)
 smoothBox.FocusLost:Connect(function() 
-    local num = tonumber(smoothBox.Text)
+    local val = string.gsub(smoothBox.Text, "SMOOTH: ", "")
+    local num = tonumber(val)
     if num then aimSmoothness = math.clamp(num, 0.01, 1) end
+    smoothBox.Text = "SMOOTH: "..tostring(aimSmoothness)
 end)
 
 -- BUTTONS
 local aimBtn = createButton("AIMBOT: ON", 75, function(b) aimbotEnabled = not aimbotEnabled end)
 local espBtn = createButton("ESP: ON", 110, function(b) espEnabled = not espEnabled end)
 local whBtn = createButton("WALLHACK LOCK: ON", 145, function(b) wallhackEnabled = not wallhackEnabled end)
-createButton("FOV: ON", 180, function(b) showFOV = not showFOV b.Text = "FOV: "..(showFOV and "ON" or "OFF") end)
-createButton("STREAM: OFF", 215, function(b) streamMode = not streamMode b.Text = "STREAM: "..(streamMode and "ON" or "OFF") end)
+local fovBtn = createButton("SHOW FOV: ON", 180, function(b) showFOV = not showFOV end)
+local streamBtn = createButton("STREAM MODE: OFF", 215, function(b) streamMode = not streamMode end)
 
 -- SCROLLING PLAYER LIST
 local playerListFrame = Instance.new("ScrollingFrame", frame)
@@ -83,6 +92,7 @@ playerListFrame.Position = UDim2.new(0, 5, 0, 255)
 playerListFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
 playerListFrame.ScrollBarThickness = 4
 playerListFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+playerListFrame.CanvasSize = UDim2.new(0,0,0,0)
 
 local layout = Instance.new("UIListLayout", playerListFrame)
 layout.SortOrder = Enum.SortOrder.Name
@@ -98,6 +108,8 @@ local function refreshPlayerList()
                 btn.Name = p.Name
                 btn.Size = UDim2.new(1, 0, 0, 25)
                 btn.TextColor3 = Color3.new(1,1,1)
+                btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+                btn.BorderSizePixel = 0
                 btn.MouseButton1Click:Connect(function() partyList[p.Name] = not partyList[p.Name] end)
             end
             btn.Text = p.Name
@@ -109,13 +121,25 @@ local function refreshPlayerList()
     end
 end
 
--- Check Line of Sight (ใช้เฉพาะตอนปิด Wallhack)
-local function hasLineOfSight(model)
+-- ฟังก์ชันเช็คการมองเห็นแบบใหม่ (Raycast)
+local function isVisible(targetChar)
+    local cam = workspace.CurrentCamera
     local char = LocalPlayer.Character
-    if char and char:FindFirstChild("Head") and model:FindFirstChild("Head") then
-        local ray = Ray.new(char.Head.Position, (model.Head.Position - char.Head.Position).Unit * 1000)
-        local hit = workspace:FindPartOnRayWithIgnoreList(ray, {char, model})
-        return hit == nil
+    if not char or not targetChar:FindFirstChild("Head") then return false end
+    
+    local rayOrigin = cam.CFrame.Position
+    local rayDirection = (targetChar.Head.Position - rayOrigin)
+    
+    local params = RaycastParams.new()
+    -- ข้ามตัวเอง, UI และหัวเป้าหมาย (เพื่อให้ชนแค่กำแพง)
+    params.FilterDescendantsInstances = {char, gui, game.CoreGui}
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    
+    local result = workspace:Raycast(rayOrigin, rayDirection, params)
+    
+    -- ถ้าไม่มีอะไรบัง หรือสิ่งที่บังอยู่คือตัวละครเป้าหมายเอง แปลว่ามองเห็น
+    if not result or result.Instance:IsDescendantOf(targetChar) then
+        return true
     end
     return false
 end
@@ -134,8 +158,8 @@ local function getClosestTarget()
             if hum and hum.Health > 0 and head then
                 local pos, onscreen = cam:WorldToScreenPoint(head.Position)
                 if onscreen then
-                    -- ถ้าเปิด Wallhack จะข้ามการเช็คสิ่งกีดขวางไปเลย
-                    if wallhackEnabled or hasLineOfSight(char) then
+                    -- เช็คเงื่อนไข Wallhack Lock
+                    if wallhackEnabled or isVisible(char) then
                         local d = (Vector2.new(pos.X, pos.Y) - center).Magnitude
                         if d < dist then
                             dist = d
@@ -149,7 +173,7 @@ local function getClosestTarget()
     return closest
 end
 
--- ESP & DRAWING
+-- DRAWING & UPDATES
 local fovCircle = Drawing.new("Circle")
 fovCircle.Thickness = 1
 fovCircle.Color = Color3.new(1,1,1)
@@ -159,6 +183,9 @@ task.spawn(function()
         aimBtn.Text = "AIMBOT: "..(aimbotEnabled and "ON" or "OFF")
         espBtn.Text = "ESP: "..(espEnabled and "ON" or "OFF")
         whBtn.Text = "WALLHACK LOCK: "..(wallhackEnabled and "ON" or "OFF")
+        fovBtn.Text = "SHOW FOV: "..(showFOV and "ON" or "OFF")
+        streamBtn.Text = "STREAM MODE: "..(streamMode and "OFF" or "ON")
+        
         refreshPlayerList()
         
         if espEnabled and not streamMode then
@@ -183,6 +210,8 @@ task.spawn(function()
                         txt.Size = UDim2.new(1,0,1,0)
                         txt.BackgroundTransparency = 1
                         txt.Text = p.Name
+                        txt.Font = Enum.Font.SourceSansBold
+                        txt.TextSize = 12
                         txt.TextStrokeTransparency = 0
 
                         if partyList[p.Name] then
@@ -198,8 +227,12 @@ task.spawn(function()
         else
             for _, p in pairs(Players:GetPlayers()) do
                 if p.Character then
-                    if p.Character:FindFirstChild("ESPHighlight") then p.Character.ESPHighlight:Destroy() end
-                    if p.Character:FindFirstChild("Head") and p.Character.Head:FindFirstChild("NameTag") then p.Character.Head.NameTag:Destroy() end
+                    local h = p.Character:FindFirstChild("ESPHighlight")
+                    if h then h:Destroy() end
+                    if p.Character:FindFirstChild("Head") then
+                        local n = p.Character.Head:FindFirstChild("NameTag")
+                        if n then n:Destroy() end
+                    end
                 end
             end
         end
